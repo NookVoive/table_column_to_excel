@@ -11,11 +11,13 @@ import logging
 import os
 import time
 import tkinter as tk
-from pprint import pprint
 from tkinter import ttk, filedialog
 from tkinter import simpledialog
 
+import cx_Oracle
 import openpyxl as openpyxl
+import psycopg2
+import pymysql as pymysql
 
 
 class DIALOG_FILE(tk.Toplevel):
@@ -215,24 +217,45 @@ class BASE_DESK(tk.Tk):
             return True
 
     def submit(self):
-        db_info = DB_INFO(db_type=self.db_type, db_host=self.db_host, db_port=self.db_port, db_name=self.db_database
-                          , db_user=self.db_user, db_passwd=self.db_passwd)
+        db_info = DB_INFO(db_type=self.db_type,
+                          db_host=self.db_host.get(), db_port=self.db_port.get(), db_name=self.db_database.get(),
+                          db_user=self.db_user.get(), db_passwd=self.db_passwd.get())
         excel_info = Excel_INFO(self.file_path.get(), self.file_name.get(), self.file_type)
 
         # 检查并创建文件
         self.touch_file(excel_info)
 
-        export_to_file(db_info,excel_info)
+        export_to_file(db_info, excel_info)
 
 
 def get_db_cur(db_info):
-    pass
+    db_type = db_info.db_type
+    if db_type == 'postgres':
+        conn = psycopg2.connect(host=db_info.db_host, port=db_info.db_port, database=db_info.db_name,
+                                user=db_info.db_user, password=db_info.db_passwd)
+        cur = conn.cursor()
+        return cur
+
+    elif db_type == 'mysql':
+        conn = pymysql.connect(host=db_info.db_host, port=db_info.db_port, database=db_info.db_name,
+                               user=db_info.db_user, password=db_info.db_passwd)
+        cur = conn.cursor()
+        return cur
+    elif db_type == 'oracle':
+        # cx_Oracle.connect("hr", "welcome", "localhost/orclpdb1")
+        conn = cx_Oracle.connect(db_info.db_user, db_info.db_passwd,
+                                 db_info.db_host + ":" + str(db_info.db_port) + '/' + db_info.db_name)
+        cur = conn.cursor()
+        return cur
+    else:
+        print("数据库类型错误,请重新选择!")
 
 
 def export_to_file(db_info, excel_info):
     # 获取数据库连接
     cur = get_db_cur(db_info)
     pass
+
 
 def main():
     base_desk = BASE_DESK("表字段导出Excel工具")
