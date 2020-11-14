@@ -251,14 +251,101 @@ def get_db_cur(db_info):
         print("数据库类型错误,请重新选择!")
 
 
-def export_to_file(db_info, excel_info):
+def get_table_list_postgres(cur):
+    sql_text = '''
+select 
+    lower(u.usename) as table_owner
+    ,lower(n.nspname) as table_schema
+    ,lower(c.relname) as table_name
+    ,cast(obj_description(c.oid,'pg_class') as varchar) as table_comment
+from pg_class c 
+join pg_namespace n on c.relnamespace = n.oid 
+left join pg_user u on c.relowner = u.usesysid 
+where lower(n.nspname) not in ('pg_toast','information_schema','pg_catalog')
+order by n.nspname ,c.relname
+'''
+    cur.execute(sql_text)
+    table_list = cur.fetchall()
+
+    return table_list
+
+
+def get_table_list_mysql(cur):
+    sql_text = '''
+    select 
+table_schema as table_owner 
+,table_schema as table_schema
+,table_name  as table_name
+,table_comment as table_comment 
+from information_schema.tables t 
+where lower(table_schema) <> lower('information_schema')
+  and lower(table_schema) <> lower('mysql')
+  and lower(table_schema) <> lower('performance_schema')
+  and lower(table_schema) <> lower('sys')
+order by t.table_schema,t.table_name 
+    '''
+
+    cur.execute(sql_text)
+    table_list = cur.fetchall()
+
+    return table_list
+
+
+def get_table_list_oracle(cur):
+    sql_text = '''
+    select 
+t.owner as table_owner 
+,t.owner as table_schema
+,t.table_name  as table_name
+,t_1.comments as table_comment 
+from all_tables t 
+left join all_table_comments t_1 on t.table_name = t_1.table_name 
+order by t.owner,t.table_name 
+    '''
+
+    cur.execute(sql_text)
+    table_list = cur.fetchall()
+
+    return table_list
+
+
+def get_table_list(db_info):
+    table_list = []
+
     # 获取数据库连接
     cur = get_db_cur(db_info)
+
+    if db_info.db_type == 'postgres':
+        table_list = get_table_list_postgres(cur)
+        return table_list
+
+    elif db_info.db_type == 'mysql':
+        table_list = get_table_list_mysql(cur)
+        return table_list
+    elif db_info.db_type == 'oracle':
+        table_list = get_table_list_oracle(cur)
+        return table_list
+    else:
+        print("数据库类型错误,请重新选择!")
+
+    return table_list
+
+
+def add_excel_sheet(excel_info, table_list):
     pass
 
 
+def export_to_file(db_info, excel_info):
+
+    # 获取表清单
+    table_list = get_table_list(db_info)
+
+    # 根据表清单写入Excel
+    add_excel_sheet(excel_info,table_list)
+
+
 def main():
-    base_desk = BASE_DESK("表字段导出Excel工具")
+    base_desk = BASE_DESK(title="表字段导出Excel工具")
 
     base_desk.mainloop()
 
