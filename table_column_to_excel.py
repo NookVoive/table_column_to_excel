@@ -9,6 +9,7 @@
 """
 import logging
 import os
+import re
 import time
 import tkinter as tk
 from tkinter import ttk, filedialog
@@ -54,6 +55,27 @@ class Excel_INFO():
         self.file_name = file_name
         self.file_type = file_type
         self.file_name_full = file_path + '/' + file_name + file_type
+
+
+class TABLE_INFO():
+    def __init__(self, table_owner, table_schema, table_name, table_comment):
+        self.table_owner = table_owner
+        self.table_schema = table_schema
+        self.table_name = table_name
+        self.table_comment = table_comment
+
+        self.table_name_full = table_schema + '.' + table_name
+        self.sheet_name = self.table_name_full
+        self.table_link = '=HYPERLINK("#{sheet_name}!A1","{table_name}")'.format(sheet_name=self.sheet_name,
+                                                                                      table_name=self.table_name)
+    def update_table_link(self):
+        self.table_link = '=HYPERLINK("#{sheet_name}!A1","{table_name}")'.format(sheet_name=self.sheet_name,
+                                                                                      table_name=self.table_name)
+
+    def update_sheet_name(self, sheet_name):
+        self.sheet_name = sheet_name
+        # 更新表名对应超链接
+        self.table_link()
 
 
 class BASE_DESK(tk.Tk):
@@ -328,20 +350,136 @@ def get_table_list(db_info):
     else:
         print("数据库类型错误,请重新选择!")
 
+    cur.close()
     return table_list
 
 
-def add_excel_sheet(excel_info, table_list):
+def check_sheet_name(dict_sheet_name, sheet_name):
+    # Excelsheet页限制最大31长度,预留三位序号位及一位下划线
+    max_sheet_name_len = 31 - 4
+    # sheet名称不支持符号
+    p = re.compile(r'[:\\/?*\[\]]')
+    sheet_name = re.sub(p, "", sheet_name)
+
+    if len(sheet_name) > max_sheet_name_len:
+        # 右侧截取最大长度并去除'.'符号
+        sheet_name_new = sheet_name[- max_sheet_name_len:].strip('.')
+
+        logging.warning(
+            'length of : {sheet_name} out of {max_sheet_name_len} , rename to : {sheet_name_new} '.format(
+                sheet_name=sheet_name.ljust(50), max_sheet_name_len=max_sheet_name_len,
+                sheet_name_new=sheet_name_new))
+
+        sheet_name = sheet_name_new
+
+    # 判断名称是否已存在
+    if sheet_name in dict_sheet_name.keys():
+        dict_sheet_name[sheet_name] += 1
+        sheet_name_new = sheet_name + '_' + str(dict_sheet_name[sheet_name]).zfill(3)
+        logging.warning(
+            'name of : {sheet_name} already exists, rename to : {sheet_name_new} '.format(
+                sheet_name=sheet_name.ljust(50),
+                sheet_name_new=sheet_name_new))
+        sheet_name = sheet_name_new
+    else:
+        dict_sheet_name.setdefault(sheet_name, 1)
+
+    return sheet_name
+
+
+def get_column_list_postgres(cur, table_info):
+    sql_text = '''
+    
+    '''
     pass
 
 
-def export_to_file(db_info, excel_info):
+def get_column_list_mysql(cur, table_info):
+    pass
 
+
+def get_column_list_oracle(cur, table_info):
+    pass
+
+
+def get_column_list(db_info, table_info):
+    column_list = []
+
+    # 获取数据库连接
+    cur = get_db_cur(db_info)
+
+    if db_info.db_type == 'postgres':
+        column_list = get_column_list_postgres(cur,table_info)
+        return column_list
+
+    elif db_info.db_type == 'mysql':
+        column_list = get_column_list_mysql(cur,table_info)
+        return column_list
+    elif db_info.db_type == 'oracle':
+        column_list = get_column_list_oracle(cur,table_info)
+        return column_list
+    else:
+        print("数据库类型错误,请重新选择!")
+
+    cur.close()
+    return column_list
+
+
+def add_sheet_table(db_info, table_info, target_file, index=0):
+    sheet_table = target_file.create_sheet(index=index, title=table_info.sheet_name)
+
+    link_catalog = '=HYPERLINK("#{sheet_name}!A1","返回首页")'.format(sheet_name="目录")
+
+    # 获取表字段
+    column_list = get_column_list(db_info,table_info)
+
+
+def add_excel_sheet(target_file, db_info):
     # 获取表清单
     table_list = get_table_list(db_info)
 
+    # 目录页
+    sheet_catalog = target_file.create_sheet(index=0, title="目录")
+
+    sheet_catalog.cell(row=1, column=1, value='序号')
+    sheet_catalog.cell(row=1, column=2, value='表所有者')
+    sheet_catalog.cell(row=1, column=3, value='模式名')
+    sheet_catalog.cell(row=1, column=4, value='表名')
+    sheet_catalog.cell(row=1, column=5, value='表中文名')
+
+    # 遍历插入
+    for i, table in enumerate(table_list):
+        table_info = TABLE_INFO(table_owner=table[0], table_schema=table[1], table_name=table[2],
+                                table_comment=table[3])
+
+        sheet_name = table_info.table_name_full
+
+        # 表sheet页名称字典,并记录该名称重复次数
+        dict_sheet_name = dict()
+        sheet_name = check_sheet_name(dict_sheet_name, sheet_name)
+
+        # 更新表对应sheet名
+        table_info.update_sheet_name(sheet_name)
+
+        sheet_catalog.cell(row=i + 2, column=1, value=i + 1)
+        sheet_catalog.cell(row=i + 2, column=2, value=table_info.table_owner)
+        sheet_catalog.cell(row=i + 2, column=3, value=table_info.table_schema)
+        sheet_catalog.cell(row=i + 2, column=4, value=table_info.table_link)
+        sheet_catalog.cell(row=i + 2, column=5, value=table_info.table_comment)
+
+        # 增加每张表的sheet页
+        add_sheet_table(target_file=target_file, db_info=db_info, table_info=table_info, index=i + 1)
+
+
+def export_to_file(db_info, excel_info):
+    # 目标文件
+    target_file = openpyxl.load_workbook(excel_info.file_name_full)
+
     # 根据表清单写入Excel
-    add_excel_sheet(excel_info,table_list)
+    add_excel_sheet(target_file, db_info)
+
+    target_file.save(filename=excel_info.file_name_full)
+    target_file.close()
 
 
 def main():
