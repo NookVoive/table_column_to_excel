@@ -13,7 +13,6 @@ import re
 import time
 import tkinter as tk
 from tkinter import ttk, filedialog
-from tkinter import simpledialog
 
 import cx_Oracle
 import openpyxl as openpyxl
@@ -389,17 +388,61 @@ def check_sheet_name(dict_sheet_name, sheet_name):
 
 def get_column_list_postgres(cur, table_info):
     sql_text = '''
-    
-    '''
-    pass
+    select 
+t.column_name as column_name
+,t.data_type as column_type
+,case t.is_nullable when 'NO' then 'Y' end as not_null 
+,t.column_default as  column_default
+,'' as column_comment
+from information_schema.columns t 
+where table_schema = '{table_schema}' 
+and table_name = '{table_name}'
+order by t.ordinal_position
+    '''.format(table_schema=table_info.table_schema,table_name=table_info.table_name)
+    cur.execute(sql_text)
+    column_list = cur.fetchall()
+
+    return column_list
 
 
 def get_column_list_mysql(cur, table_info):
-    pass
+    sql_text = '''
+        select 
+    t.column_name as column_name
+    ,t.column_type as column_type
+    ,case t.is_nullable when 'NO' then 'Y' end as not_null 
+    ,t.column_default as  column_default
+    ,t.column_comment as column_comment
+    from information_schema.columns t 
+    where t.table_schema = '{table_schema}' 
+    and t.table_name = '{table_name}'
+    order by t.ordinal_position
+        '''.format(table_schema=table_info.table_schema, table_name=table_info.table_name)
+    cur.execute(sql_text)
+    column_list = cur.fetchall()
+
+    return column_list
 
 
 def get_column_list_oracle(cur, table_info):
-    pass
+    sql_text = '''
+            select 
+        t.column_name as column_name
+        ,t.data_type as column_type
+        ,case t.nullable when 'N' then 'Y' end as not_null 
+        ,t.data_default as  column_default
+        ,t_1.comments as column_comment
+        from all_table_columns t 
+        left join all_col_comments t_1 on t.table_name = t_1.table_name and t.owner = t_1.owner 
+        and t.column_name = t_1.column_name
+        where t.owner = '{table_schema}' 
+        and t.table_name = '{table_name}'
+        order by t.column_id
+            '''.format(table_schema=table_info.table_schema, table_name=table_info.table_name)
+    cur.execute(sql_text)
+    column_list = cur.fetchall()
+
+    return column_list
 
 
 def get_column_list(db_info, table_info):
@@ -432,6 +475,30 @@ def add_sheet_table(db_info, table_info, target_file, index=0):
 
     # 获取表字段
     column_list = get_column_list(db_info,table_info)
+
+    # 返回首页
+    sheet_table.cell(row=1, column=1, value=link_catalog)
+    sheet_table.cell(row=1+1, column=1+0, value="表名:")
+    sheet_table.cell(row=1+1, column=1+1, value=table_info.table_name_full)
+    sheet_table.cell(row=1+2, column=1+0, value="表中文名:")
+    sheet_table.cell(row=1+2, column=1+1, value=table_info.table_comment)
+
+    # 列信息
+    sheet_table.cell(row=1 + 3, column=1 + 0, value="序号")
+    sheet_table.cell(row=1 + 3, column=1 + 1, value="字段名")
+    sheet_table.cell(row=1 + 3, column=1 + 2, value="数据类型")
+    sheet_table.cell(row=1 + 3, column=1 + 3, value="不许为空")
+    sheet_table.cell(row=1 + 3, column=1 + 4, value="默认值")
+    sheet_table.cell(row=1 + 3, column=1 + 5, value="字段注释")
+
+    # 遍历写入
+    for i, coulumn in enumerate(column_list):
+        sheet_table.cell(row=1 + 4 + i , column=1 + 0, value=i+1)
+        sheet_table.cell(row=1 + 4 + i , column=1 + 1, value=coulumn[0])
+        sheet_table.cell(row=1 + 4 + i , column=1 + 2, value=coulumn[1])
+        sheet_table.cell(row=1 + 4 + i , column=1 + 3, value=coulumn[2])
+        sheet_table.cell(row=1 + 4 + i , column=1 + 4, value=coulumn[3])
+        sheet_table.cell(row=1 + 4 + i , column=1 + 5, value=coulumn[4])
 
 
 def add_excel_sheet(target_file, db_info):

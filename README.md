@@ -26,3 +26,8 @@ https://www.oracle.com/cn/database/technology/instant-client.html
 “Basic” 或 “Basic Light” 均可
 
 下载后解压并添加路径到`PATH`环境变量中.
+
+## 编译打包
+```powershell
+pyinstaller -F table_column_to_excel.py
+```

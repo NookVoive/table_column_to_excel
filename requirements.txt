@@ -1,4 +1,6 @@
+cx-Oracle==8.0.1
 et-xmlfile==1.0.1
 jdcal==1.4.1
 openpyxl==3.0.5
 psycopg2==2.8.6
+PyMySQL==0.10.1
